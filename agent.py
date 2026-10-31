@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 import operator
 import datetime
+import uuid
 from typing import Annotated, List, Literal, TypedDict
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph.message import add_messages
@@ -65,7 +66,7 @@ def get_text(m) -> str:
     return ""
 
 # Summarize History
-K_TURNS = 2
+K_TURNS = 1
 def summarize_history(state: MessagesState):
     messages = state["messages"]
     turns = split_into_turns(messages)
@@ -92,8 +93,9 @@ def summarize_history(state: MessagesState):
 
     summary_msg = HumanMessage(content=f"[Tóm tắt hội thoại trước đó]: {summary_text}")
     delete = [RemoveMessage(id=m.id) for m in messages]
-    return {"messages": delete + [summary_msg] + keep}
-
+    keep_new = [m.model_copy(update={"id": str(uuid.uuid4())}) for m in keep]
+    return {"messages": delete + [summary_msg] + keep_new}
+  
 system_message = SystemMessage(content=prompts.SYSTEM_MESSAGE)
 
 # Decision
@@ -106,7 +108,11 @@ def agent_node(state: MessagesState):
 def generate_answer(state: MessagesState):
     user_messages = [m for m in state["messages"] if isinstance(m, HumanMessage) or (isinstance(m, dict) and m.get('role') == 'user')]
     latest_question = user_messages[-1].content if hasattr(user_messages[-1], 'content') else user_messages[-1].get('content', '')
-
+    summary = next(
+        (get_text(m) for m in state["messages"]
+         if isinstance(m, HumanMessage) and get_text(m).startswith("[Tóm tắt")),
+        "",
+    )
     context, tool_name = get_latest_tool_context(state)
     
     if tool_name == "search_web":
@@ -118,9 +124,11 @@ def generate_answer(state: MessagesState):
         
     gen_prompt = f"""
     NHIỆM VỤ: {instruction}
+    LỊCH SỬ HỘI THOẠI (tóm tắt): {summary or "Không có"}
     NGỮ CẢNH HIỆN TẠI: {context}
     CÂU HỎI HIỆN TẠI: {latest_question}
     """
+    # print(f" =LAST QUESTION= {latest_question}\n =SUMMARY= {summary}")
     
     response = llm.invoke([
         system_message,
