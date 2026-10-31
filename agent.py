@@ -65,7 +65,7 @@ def get_text(m) -> str:
     return ""
 
 # Summarize History
-K_TURNS = 1
+K_TURNS = 2
 def summarize_history(state: MessagesState):
     messages = state["messages"]
     turns = split_into_turns(messages)
@@ -131,12 +131,15 @@ def generate_answer(state: MessagesState):
 # Tool retrieve
 @tool()
 def retriever_tool(query: str):
-    """
-    Truy xuất thông tin từ vector database
-    Dùng kiến thức có sẵn để trả lời
-    
+    """Tra cứu kho dữ liệu y khoa về sức khỏe tâm thần
+    (bệnh lý, triệu chứng, nguyên nhân, chẩn đoán, điều trị, chăm sóc).
+ 
+    Dùng khi người dùng hỏi kiến thức y khoa mà lịch sử hội thoại chưa đủ để trả lời.
+    Không dùng cho tin tức mới, thông tin thời gian thực, hoặc câu chào hỏi thông thường.
+ 
     Args:
-        query: câu truy vấn để tìm kiếm trong vector database.
+        query: câu truy vấn tiếng Việt, nêu rõ chủ đề y khoa cần tìm
+            (ví dụ: "triệu chứng rối loạn lo âu lan tỏa").
     """
     retrieved_docs = vector_store.similarity_search(query, k=4)
 
@@ -157,11 +160,14 @@ tavily_tool = TavilySearch(
 
 @tool
 def search_web(query: str) -> str:
-    """
-    Tìm thêm thông tin từ internet khi thông tin từ vector database là không đủ
-    
+    """Tìm kiếm trên Internet để lấy thông tin mới hoặc thời gian thực.
+ 
+    Dùng khi người dùng hỏi về tin tức, nghiên cứu hoặc quy định mới, thông tin cập nhật
+    gần đây, hoặc chủ đề nhiều khả năng không có trong kho bài viết y khoa nội bộ.
+    Không dùng cho kiến thức y khoa phổ thông (hãy dùng retriever_tool).
+ 
     Args:
-        query: câu truy vấn để search web.
+        query: câu truy vấn ngắn gọn, nêu rõ chủ đề cần tìm.
     """
     now = datetime.datetime.now()
     current_time_info = f"ngày {now.strftime('%d/%m/%Y')} (Giờ {now.strftime('%H:%M')})"
